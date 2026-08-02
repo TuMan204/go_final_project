@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/stretchr/testify v1.11.1
-	modernc.org/sqlite v1.54.0
+	modernc.org/sqlite v1.55.0
 )
 
 require (
