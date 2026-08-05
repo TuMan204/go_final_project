@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+
+	"github.com/TuMan204/go_final_project/internal/api"
 )
 
 type Server struct {
@@ -16,6 +18,7 @@ type Server struct {
 func NewServer(logger *log.Logger) Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("./web")))
+	mux.HandleFunc("/api/nextdate", api.HandleNextDate)
 
 	addr := 7540
 	envPort := os.Getenv("TODO_PORT")
