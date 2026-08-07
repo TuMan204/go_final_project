@@ -2,6 +2,7 @@ package nextdate
 
 import (
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ var (
 	errWrongInterval       = errors.New("wrong interval")
 	errUnsupportedFormat   = errors.New("unsupported format")
 	errExceededMaxInterval = errors.New("the maximum allowed interval has been exceeded")
+	errWrongValue          = errors.New("wrong value")
 )
 
 const dateFormat string = "20060102"
@@ -68,11 +70,38 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			return "", errWrongInterval
 		}
 
-		//weekdaySlice := strings.Split(repeatSlice[1], ",")
+		weekdayNow := int(now.Weekday())
 
-		return "", errUnsupportedFormat
+		weekdaySlice := strings.Split(repeatSlice[1], ",")
+		weekdaySliceInt := make([]int, 0)
+		for _, weekday := range weekdaySlice {
+			weekdayInt, err := strconv.Atoi(weekday)
+			if err != nil {
+				return "", err
+			}
+			if weekdayInt < 1 || weekdayInt > 7 {
+				return "", errWrongValue
+			}
+			weekdaySliceInt = append(weekdaySliceInt, weekdayInt)
+		}
+
+		sort.Ints(weekdaySliceInt) // для сортировки слайса дней недели, если они не по порядку
+
+		for idx, weekday := range weekdaySliceInt {
+			if weekday > weekdayNow {
+				i.days = weekday - weekdayNow
+				break
+			} else if idx == len(weekdaySliceInt)-1 {
+				dur := now.Sub(date)
+				day := int(dur / (24 * time.Hour))
+				i.days = day + (7 - weekdayNow + weekdaySliceInt[0])
+			}
+		}
 	case "m":
-		return "", errUnsupportedFormat
+		if len(repeatSlice) > 3 {
+			return "", errWrongInterval
+		}
+
 	default:
 		return "", errWrongSymbol
 	}
