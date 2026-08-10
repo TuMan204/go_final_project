@@ -17,6 +17,8 @@ func main() {
 
 	server := server.NewServer(&logger)
 
+	server.Run()
+
 	if err := server.Serv.ListenAndServe(); err != nil {
 		logger.Fatal()
 	}

@@ -15,6 +15,10 @@ type Server struct {
 	Serv   *http.Server
 }
 
+func (s *Server) Run() {
+
+}
+
 func NewServer(logger *log.Logger) Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("./web")))

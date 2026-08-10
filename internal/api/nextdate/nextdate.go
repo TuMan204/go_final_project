@@ -32,6 +32,117 @@ func afterNow(date time.Time, now time.Time) bool {
 	return date.After(now)
 }
 
+type weekdaysRules struct {
+	rule []int
+}
+
+func (w *weekdaysRules) parseWeekdayRules(repeatStr string) error {
+	weekdaySlice := strings.Split(repeatStr, ",")
+	for _, weekday := range weekdaySlice {
+		weekdayInt, err := strconv.Atoi(weekday)
+		if err != nil {
+			return err
+		}
+		if weekdayInt < 1 || weekdayInt > 7 {
+			return errInvalidValue
+		}
+		w.rule = append(w.rule, weekdayInt)
+	}
+
+	sort.Ints(w.rule) // для сортировки слайса дней недели, если они не по порядку
+
+	return nil
+}
+
+func (w *weekdaysRules) countDays(weekdayNow int, date time.Time, now time.Time) int {
+	days := 0
+	for idx, weekday := range w.rule {
+		if weekday > weekdayNow {
+			days = weekday - weekdayNow
+			break
+		} else if idx == len(w.rule)-1 {
+			dur := now.Sub(date)
+			dayDur := int(dur / (24 * time.Hour))
+			days = dayDur + (7 - weekdayNow + w.rule[0])
+		}
+	}
+	return days
+}
+
+type daysOfTheMonthsRules struct {
+	daysRule       [32]bool
+	monthsRule     [13]bool
+	lastDayRule    bool
+	preLastDayRule bool
+}
+
+func (d *daysOfTheMonthsRules) parseDaysOfTheMonthsRules(repeatSlice []string) error {
+	if len(repeatSlice) == 2 {
+		for month := 1; month < len(d.monthsRule); month++ {
+			d.monthsRule[month] = true
+		}
+	}
+
+	for i := 1; i < len(repeatSlice); i++ {
+		infoStrSlice := strings.Split(repeatSlice[i], ",")
+		for _, infoStr := range infoStrSlice {
+			info, err := strconv.Atoi(infoStr)
+			if err != nil {
+				return err
+			}
+
+			switch i {
+			case 1:
+				if info < -2 || info > 31 || info == 0 {
+					return errInvalidDayOfMonth
+				}
+				switch info {
+				case -2:
+					d.preLastDayRule = true
+				case -1:
+					d.lastDayRule = true
+				default:
+					d.daysRule[info] = true
+				}
+			case 2:
+				if info < 1 || info > 12 {
+					return errInvalidMonth
+				}
+				d.monthsRule[info] = true
+			}
+		}
+	}
+	return nil
+}
+
+func (d *daysOfTheMonthsRules) countDays(date time.Time, now time.Time) int {
+	dateTmp := date
+	daysCount := 0
+	for {
+		daysCount++
+		dateTmp = dateTmp.AddDate(0, 0, 1)
+		year, month, day := dateTmp.Date()
+
+		isDaysRule := d.daysRule[day]
+		isMonthRule := d.monthsRule[month]
+
+		lastDay := time.Date(year, month+1, 0, 0, 0, 0, 0, dateTmp.Location())
+		preLastDay := lastDay.Day() - 1
+
+		if d.preLastDayRule && day == preLastDay {
+			isDaysRule = true
+		}
+		if d.lastDayRule && day == lastDay.Day() {
+			isDaysRule = true
+		}
+
+		if afterNow(dateTmp, now) && isDaysRule && isMonthRule {
+			break
+		}
+	}
+	return daysCount
+}
+
 func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 	if len(repeat) == 0 {
 		return "", errRepeatIsEmpty
@@ -75,89 +186,30 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			return "", errInvalidInterval
 		}
 
+		var wRules weekdaysRules
+
+		err = wRules.parseWeekdayRules(repeatSlice[1])
+		if err != nil {
+			return "", err
+		}
+
 		weekdayNow := int(now.Weekday())
 
-		weekdaySlice := strings.Split(repeatSlice[1], ",")
-		weekdaySliceInt := make([]int, 0)
-		for _, weekday := range weekdaySlice {
-			weekdayInt, err := strconv.Atoi(weekday)
-			if err != nil {
-				return "", err
-			}
-			if weekdayInt < 1 || weekdayInt > 7 {
-				return "", errInvalidValue
-			}
-			weekdaySliceInt = append(weekdaySliceInt, weekdayInt)
-		}
-
-		sort.Ints(weekdaySliceInt) // для сортировки слайса дней недели, если они не по порядку
-
-		for idx, weekday := range weekdaySliceInt {
-			if weekday > weekdayNow {
-				i.days = weekday - weekdayNow
-				break
-			} else if idx == len(weekdaySliceInt)-1 {
-				dur := now.Sub(date)
-				dayDur := int(dur / (24 * time.Hour))
-				i.days = dayDur + (7 - weekdayNow + weekdaySliceInt[0])
-			}
-		}
+		i.days = wRules.countDays(weekdayNow, date, now)
 
 	case "m":
 		if len(repeatSlice) > 3 {
 			return "", errInvalidInterval
 		}
 
-		var (
-			day                [32]bool
-			month              [13]bool
-			lastDayOfMonth     bool
-			prevLastDayOfMonth bool
-		)
-		var (
-			isRigthDay   bool
-			isRigthMonth bool
-		)
+		var dmRules daysOfTheMonthsRules
 
-		if len(repeatSlice) == 2 {
-			isRigthMonth = true
+		err := dmRules.parseDaysOfTheMonthsRules(repeatSlice)
+		if err != nil {
+			return "", err
 		}
 
-		for i := 1; i < len(repeatSlice); i++ {
-			infoStrSlice := strings.Split(repeatSlice[i], ",")
-			for _, infoStr := range infoStrSlice {
-				info, err := strconv.Atoi(infoStr)
-				if err != nil {
-					return "", err
-				}
-
-				if i == 1 {
-					if info > 31 || info < -2 || info == 0 {
-						return "", errInvalidDayOfMonth
-					}
-					switch info {
-					case -2:
-						prevLastDayOfMonth = true
-					case -1:
-						lastDayOfMonth = true
-					default:
-						day[info] = true
-					}
-				} else if i == 2 {
-					if info > 12 || info < 1 {
-						return "", errInvalidMonth
-					}
-					month[info] = true
-				}
-			}
-		}
-
-		for afterNow(date, now) && isRigthDay && isRigthMonth {
-			if prevLastDayOfMonth && lastDayOfMonth { //delete this
-				// fix me
-			}
-			// fix me
-		}
+		i.days = dmRules.countDays(date, now)
 
 	default:
 		return "", errWrongSymbol

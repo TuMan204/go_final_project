@@ -48,5 +48,3 @@ func Init(dbFile string) error {
 
 	return nil
 }
-
-// insert into scheduler (date, title, comment, repeat) values (20260601, kek, lol, rep);
