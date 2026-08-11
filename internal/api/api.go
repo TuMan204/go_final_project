@@ -7,10 +7,6 @@ import (
 	"github.com/TuMan204/go_final_project/internal/api/nextdate"
 )
 
-func Init() {
-	//http.HandleFunc("/api/nextdate", handleNextDate)
-}
-
 func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 	request := r.URL.Query()
 

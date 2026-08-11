@@ -1,3 +1,6 @@
 .env
 .vscode
 sqlite-tools-osx-x64-3530400
+app.exe
+build_app.sh
+test_app.sh

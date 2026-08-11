@@ -16,15 +16,10 @@ var schema string = `CREATE TABLE scheduler (
 );     
 CREATE INDEX date_idx ON scheduler (date);`
 
-func Init(dbFile string) error {
+func Init(dbPath string) error {
 	var install bool
 
-	envDBFile := os.Getenv("TODO_DBFILE")
-	if len(envDBFile) > 0 {
-		dbFile = envDBFile
-	}
-
-	_, err := os.Stat(dbFile)
+	_, err := os.Stat(dbPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			install = true
@@ -33,7 +28,7 @@ func Init(dbFile string) error {
 		}
 	}
 
-	db, err := sql.Open("sqlite", dbFile)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}

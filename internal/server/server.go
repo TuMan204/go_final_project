@@ -15,13 +15,9 @@ type Server struct {
 	Serv   *http.Server
 }
 
-func (s *Server) Run() {
-
-}
-
-func NewServer(logger *log.Logger) Server {
+func NewServer(logger *log.Logger, webPath string) Server {
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir("./web")))
+	mux.Handle("/", http.FileServer(http.Dir(webPath)))
 	mux.HandleFunc("/api/nextdate", api.HandleNextDate)
 
 	addr := 7540
