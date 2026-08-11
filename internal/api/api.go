@@ -24,3 +24,7 @@ func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 
 	w.Write([]byte(nextDate))
 }
+
+func HandleAddTask(w http.ResponseWriter, r *http.Request) {
+
+}

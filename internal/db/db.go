@@ -7,7 +7,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var schema string = `CREATE TABLE scheduler (
+const schema string = `CREATE TABLE scheduler (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date CHAR(8) NOT NULL DEFAULT '',
     title TEXT NOT NULL DEFAULT '',

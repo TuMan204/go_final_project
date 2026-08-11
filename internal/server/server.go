@@ -19,6 +19,7 @@ func NewServer(logger *log.Logger, webPath string) Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir(webPath)))
 	mux.HandleFunc("/api/nextdate", api.HandleNextDate)
+	mux.HandleFunc("POST /api/task", api.HandleAddTask)
 
 	addr := 7540
 	envPort := os.Getenv("TODO_PORT")
