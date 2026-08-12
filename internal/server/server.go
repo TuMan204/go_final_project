@@ -17,7 +17,8 @@ type Server struct {
 
 func NewServer(logger *log.Logger, webPath string) Server {
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(webPath)))
+	//mux.Handle("/", http.FileServer(http.Dir(webPath)))	// Основное API
+	mux.Handle("/", http.FileServer(http.Dir("./web")))		// Для работы тестов workflow при команде go run main.go
 	mux.HandleFunc("/api/nextdate", api.HandleNextDate)
 	mux.HandleFunc("POST /api/task", api.HandleAddTask)
 
