@@ -1,10 +1,13 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/TuMan204/go_final_project/internal/api/nextdate"
+	"github.com/TuMan204/go_final_project/internal/db"
 )
 
 func HandleNextDate(w http.ResponseWriter, r *http.Request) {
@@ -26,5 +29,18 @@ func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleAddTask(w http.ResponseWriter, r *http.Request) {
+	var task *db.Task
+	var buf bytes.Buffer
+
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err = json.Unmarshal(buf.Bytes(), &task); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 }
