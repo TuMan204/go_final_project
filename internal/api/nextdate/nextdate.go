@@ -28,8 +28,8 @@ type interval struct {
 	years  int
 }
 
-func afterNow(date time.Time, now time.Time) bool {
-	return date.After(now)
+func AfterNow(date time.Time, now time.Time) bool {
+	return date.Format("20060102") > now.Format("20060102")
 }
 
 type weekdaysRules struct {
@@ -136,7 +136,7 @@ func (d *daysOfTheMonthsRules) countDays(date time.Time, now time.Time) int {
 			isDaysRule = true
 		}
 
-		if afterNow(dateTmp, now) && isDaysRule && isMonthRule {
+		if AfterNow(dateTmp, now) && isDaysRule && isMonthRule {
 			break
 		}
 	}
@@ -217,7 +217,7 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 
 	for {
 		date = date.AddDate(i.years, i.months, i.days)
-		if afterNow(date, now) {
+		if AfterNow(date, now) {
 			break
 		}
 	}

@@ -13,7 +13,7 @@ type Task struct {
 func AddTask(task *Task) (int64, error) {
 	var id int64
 
-	db, err := sql.Open("sqlite", "demo.db")
+	db, err := sql.Open("sqlite", "scheduler.db")
 	if err != nil {
 		return id, err
 	}
