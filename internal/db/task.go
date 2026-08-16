@@ -124,3 +124,49 @@ func UpdateTask(task *Task) error {
 	}
 	return nil
 }
+
+func UpdateDate(newDate string, id string) error {
+	db, err := sql.Open("sqlite", "scheduler.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	query := "UPDATE scheduler SET date = :date WHERE id = :id"
+	res, err := db.Exec(query,
+		sql.Named("date", newDate),
+		sql.Named("id", id))
+	if err != nil {
+		return err
+	}
+
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf(`incorrect id for updating task`)
+	}
+	return nil
+}
+
+func DeleteTask(id string) error {
+	db, err := sql.Open("sqlite", "scheduler.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = GetTask(id)
+	if err != nil {
+		return err
+	}
+
+	query := "DELETE FROM scheduler WHERE id = :id"
+	_, err = db.Exec(query, sql.Named("id", id))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

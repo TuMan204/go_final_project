@@ -24,6 +24,8 @@ func NewServer(logger *log.Logger, webPath string) Server {
 	mux.HandleFunc("POST /api/task", api.HandleAddTask)
 	mux.HandleFunc("GET /api/task", api.HandleGetTask)
 	mux.HandleFunc("PUT /api/task", api.HandleEditTask)
+	mux.HandleFunc("DELETE /api/task", api.HandleDeleteTask)
+	mux.HandleFunc("POST /api/task/done", api.HandleTaskDone)
 
 	addr := 7540
 	envPort := os.Getenv("TODO_PORT")

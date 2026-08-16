@@ -191,3 +191,53 @@ func HandleEditTask(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, map[string]string{}, http.StatusOK)
 }
+
+func HandleTaskDone(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if len(id) == 0 {
+		writeErrorJSON(w, "identifier is not specified", http.StatusInternalServerError)
+		return
+	}
+
+	task, err := db.GetTask(id)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(task.Repeat) == 0 {
+		err = db.DeleteTask(id)
+		if err != nil {
+			writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		now := time.Now()
+
+		newDate, err := nextdate.NextDate(now, task.Date, task.Repeat)
+		if err != nil {
+			writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		err = db.UpdateDate(newDate, id)
+	}
+
+	writeJSON(w, map[string]string{}, http.StatusOK)
+}
+
+func HandleDeleteTask(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if len(id) == 0 {
+		writeErrorJSON(w, "identifier is not specified", http.StatusInternalServerError)
+		return
+	}
+
+	err := db.DeleteTask(id)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]string{}, http.StatusOK)
+}
