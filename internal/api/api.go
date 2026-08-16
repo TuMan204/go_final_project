@@ -11,10 +11,12 @@ import (
 	"github.com/TuMan204/go_final_project/internal/db"
 )
 
+const dateFormat string = "20060102"
+
 func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 	request := r.URL.Query()
 
-	now, err := time.Parse("20060102", request.Get("now"))
+	now, err := time.Parse(dateFormat, request.Get("now"))
 	if err != nil {
 		now = time.Now().UTC()
 	}
@@ -29,6 +31,20 @@ func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(nextDate))
 }
 
+func HandleGetTasks(w http.ResponseWriter, r *http.Request) {
+	request := r.URL.Query()
+	searchStr := request.Get("search")
+
+	limit := 10
+	tasks, err := db.Tasks(searchStr, limit)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, TasksResp{Tasks: tasks}, http.StatusOK)
+}
+
 func HandleAddTask(w http.ResponseWriter, r *http.Request) {
 	var (
 		task db.Task
@@ -37,51 +53,51 @@ func HandleAddTask(w http.ResponseWriter, r *http.Request) {
 
 	_, err := buf.ReadFrom(r.Body)
 	if err != nil {
-		writeJson(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &task); err != nil {
-		writeJson(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if len(task.Title) == 0 {
-		writeJson(w, "the title field is not filled in", http.StatusBadRequest)
+		writeErrorJSON(w, "the title field is not filled in", http.StatusBadRequest)
 		return
 	}
 
 	err = checkDate(&task)
 	if err != nil {
-		writeJson(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	id, err := db.AddTask(&task)
 	if err != nil {
-		writeJson(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	idStr := strconv.Itoa(int(id))
-	writeJson(w, idStr, http.StatusOK)
+	writeJSON(w, map[string]string{"id": idStr}, http.StatusOK)
 }
 
 func checkDate(task *db.Task) error {
 	now := time.Now().UTC()
 
 	if len(task.Date) == 0 {
-		task.Date = now.Format("20060102")
+		task.Date = now.Format(dateFormat)
 		return nil
 	}
 
-	t, err := time.Parse("20060102", task.Date)
+	t, err := time.Parse(dateFormat, task.Date)
 	if err != nil {
 		return err
 	}
 
 	if nextdate.AfterNow(now, t) {
 		if len(task.Repeat) == 0 {
-			task.Date = now.Format("20060102")
+			task.Date = now.Format(dateFormat)
 		} else {
 			next, err := nextdate.NextDate(now, task.Date, task.Repeat)
 			if err != nil {
@@ -93,21 +109,33 @@ func checkDate(task *db.Task) error {
 	return nil
 }
 
-func writeJson(w http.ResponseWriter, data any, status int) {
+func writeErrorJSON(w http.ResponseWriter, data any, status int) {
 	msg := make(map[string]any)
-	if status != http.StatusOK {
-		msg["error"] = data
-	} else {
-		msg["id"] = data
-	}
+	msg["error"] = data
 
 	resp, err := json.Marshal(msg)
 	if err != nil {
-		writeJson(w, err.Error(), http.StatusInternalServerError)
+		writeErrorJSON(w, err.Error(), status)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(status)
 	w.Write(resp)
+}
+
+func writeJSON(w http.ResponseWriter, data any, status int) {
+	resp, err := json.Marshal(data)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(status)
+	w.Write(resp)
+}
+
+type TasksResp struct {
+	Tasks []*db.Task `json:"tasks"`
 }

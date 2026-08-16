@@ -29,7 +29,7 @@ type interval struct {
 }
 
 func AfterNow(date time.Time, now time.Time) bool {
-	return date.Format("20060102") > now.Format("20060102")
+	return date.Format(dateFormat) > now.Format(dateFormat)
 }
 
 type weekdaysRules struct {

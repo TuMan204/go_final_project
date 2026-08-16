@@ -1,6 +1,9 @@
 package db
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+)
 
 type Task struct {
 	ID      string `json:"id"`
@@ -29,4 +32,47 @@ func AddTask(task *Task) (int64, error) {
 		id, err = res.LastInsertId()
 	}
 	return id, err
+}
+
+func Tasks(search string, limit int) ([]*Task, error) {
+	tasks := make([]*Task, 0)
+
+	db, err := sql.Open("sqlite", "scheduler.db")
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	query := "SELECT * FROM scheduler ORDER BY date DESC LIMIT :limit"
+	if len(search) > 0 {
+		date, err := time.Parse("02.01.2006", search)
+		if err != nil {
+			query = "SELECT * FROM scheduler WHERE title LIKE :search OR comment LIKE :search ORDER BY date DESC LIMIT :limit"
+			search = "%" + search + "%"
+		} else {
+			query = "SELECT * FROM scheduler WHERE date = :search LIMIT :limit"
+			search = date.Format("20060102")
+		}
+	}
+	rows, err := db.Query(query, sql.Named("limit", limit), sql.Named("search", search))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var task Task
+		err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks = append(tasks, &task)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return tasks, nil
 }
