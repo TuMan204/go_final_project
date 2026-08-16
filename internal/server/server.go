@@ -20,8 +20,10 @@ func NewServer(logger *log.Logger, webPath string) Server {
 	//mux.Handle("/", http.FileServer(http.Dir(webPath)))	// Основное API
 	mux.Handle("/", http.FileServer(http.Dir("./web"))) // Для работы тестов workflow при команде go run main.go
 	mux.HandleFunc("/api/nextdate", api.HandleNextDate)
-	mux.HandleFunc("GET  /api/tasks", api.HandleGetTasks)
+	mux.HandleFunc("GET /api/tasks", api.HandleGetTasks)
 	mux.HandleFunc("POST /api/task", api.HandleAddTask)
+	mux.HandleFunc("GET /api/task", api.HandleGetTask)
+	mux.HandleFunc("PUT /api/task", api.HandleEditTask)
 
 	addr := 7540
 	envPort := os.Getenv("TODO_PORT")

@@ -2,6 +2,8 @@ package db
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -34,7 +36,7 @@ func AddTask(task *Task) (int64, error) {
 	return id, err
 }
 
-func Tasks(search string, limit int) ([]*Task, error) {
+func GetTasks(search string, limit int) ([]*Task, error) {
 	tasks := make([]*Task, 0)
 
 	db, err := sql.Open("sqlite", "scheduler.db")
@@ -75,4 +77,50 @@ func Tasks(search string, limit int) ([]*Task, error) {
 	}
 
 	return tasks, nil
+}
+
+func GetTask(id string) (*Task, error) {
+	var task Task
+
+	db, err := sql.Open("sqlite", "scheduler.db")
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	query := "SELECT * FROM scheduler WHERE id = :id"
+	err = db.QueryRow(query, sql.Named("id", id)).Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+	if err != nil {
+		return nil, errors.New("task not found")
+	}
+
+	return &task, nil
+}
+
+func UpdateTask(task *Task) error {
+	db, err := sql.Open("sqlite", "scheduler.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	query := "UPDATE scheduler SET date = :date, title = :title, comment = :comment, repeat = :repeat WHERE id = :id"
+	res, err := db.Exec(query,
+		sql.Named("date", task.Date),
+		sql.Named("title", task.Title),
+		sql.Named("comment", task.Comment),
+		sql.Named("repeat", task.Repeat),
+		sql.Named("id", task.ID))
+	if err != nil {
+		return err
+	}
+
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf(`incorrect id for updating task`)
+	}
+	return nil
 }

@@ -31,12 +31,16 @@ func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(nextDate))
 }
 
+type TasksResp struct {
+	Tasks []*db.Task `json:"tasks"`
+}
+
 func HandleGetTasks(w http.ResponseWriter, r *http.Request) {
 	request := r.URL.Query()
 	searchStr := request.Get("search")
 
 	limit := 10
-	tasks, err := db.Tasks(searchStr, limit)
+	tasks, err := db.GetTasks(searchStr, limit)
 	if err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -136,6 +140,54 @@ func writeJSON(w http.ResponseWriter, data any, status int) {
 	w.Write(resp)
 }
 
-type TasksResp struct {
-	Tasks []*db.Task `json:"tasks"`
+func HandleGetTask(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if len(id) == 0 {
+		writeErrorJSON(w, "identifier is not specified", http.StatusInternalServerError)
+		return
+	}
+
+	task, err := db.GetTask(id)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, task, http.StatusOK)
+}
+
+func HandleEditTask(w http.ResponseWriter, r *http.Request) {
+	var (
+		task db.Task
+		buf  bytes.Buffer
+	)
+
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err = json.Unmarshal(buf.Bytes(), &task); err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(task.Title) == 0 {
+		writeErrorJSON(w, "the title field is not filled in", http.StatusBadRequest)
+		return
+	}
+
+	err = checkDate(&task)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = db.UpdateTask(&task)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, map[string]string{}, http.StatusOK)
 }
