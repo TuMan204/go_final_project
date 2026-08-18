@@ -4,14 +4,70 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/TuMan204/go_final_project/internal/api/auth"
 	"github.com/TuMan204/go_final_project/internal/api/nextdate"
 	"github.com/TuMan204/go_final_project/internal/db"
 )
 
 const dateFormat string = "20060102"
+
+func checkDate(task *db.Task) error {
+	now := time.Now()
+
+	if len(task.Date) == 0 {
+		task.Date = now.Format(dateFormat)
+		return nil
+	}
+
+	t, err := time.Parse(dateFormat, task.Date)
+	if err != nil {
+		return err
+	}
+
+	if nextdate.AfterNow(now, t) {
+		if len(task.Repeat) == 0 {
+			task.Date = now.Format(dateFormat)
+		} else {
+			next, err := nextdate.NextDate(now, task.Date, task.Repeat)
+			if err != nil {
+				return err
+			}
+			task.Date = next
+		}
+	}
+	return nil
+}
+
+func writeErrorJSON(w http.ResponseWriter, data any, status int) {
+	msg := make(map[string]any)
+	msg["error"] = data
+
+	resp, err := json.Marshal(msg)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), status)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(status)
+	w.Write(resp)
+}
+
+func writeJSON(w http.ResponseWriter, data any, status int) {
+	resp, err := json.Marshal(data)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(status)
+	w.Write(resp)
+}
 
 func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 	request := r.URL.Query()
@@ -84,60 +140,6 @@ func HandleAddTask(w http.ResponseWriter, r *http.Request) {
 	}
 	idStr := strconv.Itoa(int(id))
 	writeJSON(w, map[string]string{"id": idStr}, http.StatusOK)
-}
-
-func checkDate(task *db.Task) error {
-	now := time.Now().UTC()
-
-	if len(task.Date) == 0 {
-		task.Date = now.Format(dateFormat)
-		return nil
-	}
-
-	t, err := time.Parse(dateFormat, task.Date)
-	if err != nil {
-		return err
-	}
-
-	if nextdate.AfterNow(now, t) {
-		if len(task.Repeat) == 0 {
-			task.Date = now.Format(dateFormat)
-		} else {
-			next, err := nextdate.NextDate(now, task.Date, task.Repeat)
-			if err != nil {
-				return err
-			}
-			task.Date = next
-		}
-	}
-	return nil
-}
-
-func writeErrorJSON(w http.ResponseWriter, data any, status int) {
-	msg := make(map[string]any)
-	msg["error"] = data
-
-	resp, err := json.Marshal(msg)
-	if err != nil {
-		writeErrorJSON(w, err.Error(), status)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(status)
-	w.Write(resp)
-}
-
-func writeJSON(w http.ResponseWriter, data any, status int) {
-	resp, err := json.Marshal(data)
-	if err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(status)
-	w.Write(resp)
 }
 
 func HandleGetTask(w http.ResponseWriter, r *http.Request) {
@@ -240,4 +242,40 @@ func HandleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]string{}, http.StatusOK)
+}
+
+func HandleSignIn(w http.ResponseWriter, r *http.Request) {
+	var token struct {
+		Token string `json:"token"`
+	}
+
+	var pass struct {
+		Pass string `json:"password"`
+	}
+	var buf bytes.Buffer
+
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err = json.Unmarshal(buf.Bytes(), &pass); err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	envPass := os.Getenv("TODO_PASSWORD")
+	if pass.Pass != envPass {
+		writeErrorJSON(w, "Invalid password", http.StatusUnauthorized)
+		return
+	}
+
+	token.Token, err = auth.GenerateJWT(pass.Pass)
+	if err != nil {
+		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, token, http.StatusOK)
 }
