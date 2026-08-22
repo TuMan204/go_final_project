@@ -1,0 +1,11 @@
+.github/
+.vscode/
+sqlite-tools-osx-x64-3530400/
+tests/
+.env
+.env.example
+.gitignore
+app.exe
+build_app.sh
+README.md
+test_app.sh
