@@ -2,6 +2,7 @@ package nextdate
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -180,6 +181,9 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 		if i.days > 400 {
 			return "", errExceededMaxInterval
 		}
+		if i.days < 1 {
+			return "", errInvalidInterval
+		}
 
 	case "w":
 		if len(repeatSlice) > 2 {
@@ -209,6 +213,10 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			return "", err
 		}
 
+		if !(dmRules.lastDayRule || dmRules.preLastDayRule) && !checkValidDates(&dmRules) {
+			return "", errInvalidDayOfMonth
+		}
+
 		i.days = dmRules.countDays(date, now)
 
 	default:
@@ -223,4 +231,24 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 	}
 
 	return date.Format(dateFormat), nil
+}
+
+func checkValidDates(rules *daysOfTheMonthsRules) bool {
+	for month := 1; month < len(rules.monthsRule); month++ {
+		if !rules.monthsRule[month] {
+			continue
+		}
+		for day := 1; day < len(rules.daysRule); day++ {
+			if !rules.daysRule[day] {
+				continue
+			}
+			date := fmt.Sprintf("2012%02d%02d", month, day)
+			_, err := time.Parse(dateFormat, date)
+			if err == nil {
+				return true
+			}
+		}
+	}
+
+	return false
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/TuMan204/go_final_project/internal/api"
 	"github.com/TuMan204/go_final_project/internal/api/auth"
+	"github.com/TuMan204/go_final_project/internal/db"
 )
 
 type Server struct {
@@ -16,18 +18,22 @@ type Server struct {
 	Serv   *http.Server
 }
 
-func NewServer(logger *log.Logger, webPath string) Server {
+func NewServer(logger *log.Logger, database *sql.DB) Server {
+	store := db.NewTasksStore(database)
+	service := api.NewTaskService(&store, logger)
+
+	pass := os.Getenv("TODO_PASSWORD")
+
 	mux := http.NewServeMux()
-	//mux.Handle("/", http.FileServer(http.Dir(webPath)))	// Основное API
-	mux.Handle("/", http.FileServer(http.Dir("./web"))) // Для работы тестов workflow при команде go run main.go
-	mux.HandleFunc("/api/nextdate", api.HandleNextDate)
-	mux.HandleFunc("GET /api/tasks", auth.Auth(api.HandleGetTasks))
-	mux.HandleFunc("POST /api/task", auth.Auth(api.HandleAddTask))
-	mux.HandleFunc("GET /api/task", auth.Auth(api.HandleGetTask))
-	mux.HandleFunc("PUT /api/task", auth.Auth(api.HandleEditTask))
-	mux.HandleFunc("DELETE /api/task", auth.Auth(api.HandleDeleteTask))
-	mux.HandleFunc("POST /api/task/done", auth.Auth(api.HandleTaskDone))
-	mux.HandleFunc("POST /api/signin", api.HandleSignIn)
+	mux.Handle("/", http.FileServer(http.Dir("./web")))
+	mux.HandleFunc("GET /api/nextdate", service.HandleNextDate)
+	mux.HandleFunc("GET /api/tasks", auth.Auth(service.HandleGetTasks, pass))
+	mux.HandleFunc("POST /api/task", auth.Auth(service.HandleAddTask, pass))
+	mux.HandleFunc("GET /api/task", auth.Auth(service.HandleGetTask, pass))
+	mux.HandleFunc("PUT /api/task", auth.Auth(service.HandleEditTask, pass))
+	mux.HandleFunc("DELETE /api/task", auth.Auth(service.HandleDeleteTask, pass))
+	mux.HandleFunc("POST /api/task/done", auth.Auth(service.HandleTaskDone, pass))
+	mux.HandleFunc("POST /api/signin", service.HandleSignIn)
 
 	addr := 7540
 	envPort := os.Getenv("TODO_PORT")
@@ -42,9 +48,6 @@ func NewServer(logger *log.Logger, webPath string) Server {
 		Addr:     fmt.Sprintf(":%d", addr),
 		Handler:  mux,
 		ErrorLog: logger,
-		//ReadTimeout:  10 * time.Second,
-		//WriteTimeout: 10 * time.Second,
-		//IdleTimeout:  15 * time.Second,
 	}
 
 	return Server{logger: logger, Serv: &serv}

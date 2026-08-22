@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -13,7 +15,15 @@ import (
 	"github.com/TuMan204/go_final_project/internal/db"
 )
 
-const dateFormat string = "20060102"
+const (
+	dateFormat = "20060102"
+	limit      = 10
+)
+
+var (
+	errIdentifierNotSpecified = errors.New("identifier is not specified")
+	errTitleNotFilled         = errors.New("the title field is not filled in")
+)
 
 func checkDate(task *db.Task) error {
 	now := time.Now()
@@ -69,10 +79,20 @@ func writeJSON(w http.ResponseWriter, data any, status int) {
 	w.Write(resp)
 }
 
-func HandleNextDate(w http.ResponseWriter, r *http.Request) {
+type TaskService struct {
+	store  *db.TasksStore
+	logger *log.Logger
+}
+
+func NewTaskService(store *db.TasksStore, logger *log.Logger) TaskService {
+	return TaskService{store: store, logger: logger}
+}
+
+func (s *TaskService) HandleNextDate(w http.ResponseWriter, r *http.Request) {
 	request := r.URL.Query()
 
-	now, err := time.Parse(dateFormat, request.Get("now"))
+	nowStr := request.Get("now")
+	now, err := time.Parse(dateFormat, nowStr)
 	if err != nil {
 		now = time.Now().UTC()
 	}
@@ -81,9 +101,12 @@ func HandleNextDate(w http.ResponseWriter, r *http.Request) {
 
 	nextDate, err := nextdate.NextDate(now, date, repeat)
 	if err != nil {
+		s.logger.Printf("HandleNextDate: ERR: %s\n", err.Error())
 		w.Write([]byte(err.Error()))
+		return
 	}
 
+	s.logger.Println("HandleNextDate: OK")
 	w.Write([]byte(nextDate))
 }
 
@@ -91,21 +114,22 @@ type TasksResp struct {
 	Tasks []*db.Task `json:"tasks"`
 }
 
-func HandleGetTasks(w http.ResponseWriter, r *http.Request) {
+func (s *TaskService) HandleGetTasks(w http.ResponseWriter, r *http.Request) {
 	request := r.URL.Query()
 	searchStr := request.Get("search")
 
-	limit := 10
-	tasks, err := db.GetTasks(searchStr, limit)
+	tasks, err := s.store.GetTasks(searchStr, limit)
 	if err != nil {
+		s.logger.Printf("HandleGetTasks: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	s.logger.Println("HandleGetTasks: OK")
 	writeJSON(w, TasksResp{Tasks: tasks}, http.StatusOK)
 }
 
-func HandleAddTask(w http.ResponseWriter, r *http.Request) {
+func (s *TaskService) HandleAddTask(w http.ResponseWriter, r *http.Request) {
 	var (
 		task db.Task
 		buf  bytes.Buffer
@@ -113,51 +137,60 @@ func HandleAddTask(w http.ResponseWriter, r *http.Request) {
 
 	_, err := buf.ReadFrom(r.Body)
 	if err != nil {
+		s.logger.Printf("HandleAddTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &task); err != nil {
+		s.logger.Printf("HandleAddTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if len(task.Title) == 0 {
-		writeErrorJSON(w, "the title field is not filled in", http.StatusBadRequest)
+		s.logger.Printf("HandleAddTask: ERR: %s\n", errTitleNotFilled.Error())
+		writeErrorJSON(w, errTitleNotFilled.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = checkDate(&task)
 	if err != nil {
+		s.logger.Printf("HandleAddTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	id, err := db.AddTask(&task)
+	id, err := s.store.AddTask(&task)
 	if err != nil {
+		s.logger.Printf("HandleAddTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	idStr := strconv.Itoa(int(id))
+	s.logger.Println("HandleAddTask: OK")
 	writeJSON(w, map[string]string{"id": idStr}, http.StatusOK)
 }
 
-func HandleGetTask(w http.ResponseWriter, r *http.Request) {
+func (s *TaskService) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if len(id) == 0 {
-		writeErrorJSON(w, "identifier is not specified", http.StatusInternalServerError)
+		s.logger.Printf("HandleGetTask: ERR: %s\n", errIdentifierNotSpecified.Error())
+		writeErrorJSON(w, errIdentifierNotSpecified.Error(), http.StatusBadRequest)
 		return
 	}
 
-	task, err := db.GetTask(id)
+	task, err := s.store.GetTask(id)
 	if err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		s.logger.Printf("HandleGetTask: ERR: %s\n", err.Error())
+		writeErrorJSON(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	s.logger.Println("HandleGetTask: OK")
 	writeJSON(w, task, http.StatusOK)
 }
 
-func HandleEditTask(w http.ResponseWriter, r *http.Request) {
+func (s *TaskService) HandleEditTask(w http.ResponseWriter, r *http.Request) {
 	var (
 		task db.Task
 		buf  bytes.Buffer
@@ -165,51 +198,60 @@ func HandleEditTask(w http.ResponseWriter, r *http.Request) {
 
 	_, err := buf.ReadFrom(r.Body)
 	if err != nil {
+		s.logger.Printf("HandleEditTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &task); err != nil {
+		s.logger.Printf("HandleEditTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if len(task.Title) == 0 {
-		writeErrorJSON(w, "the title field is not filled in", http.StatusBadRequest)
+		s.logger.Printf("HandleEditTask: ERR: %s\n", errTitleNotFilled.Error())
+		writeErrorJSON(w, errTitleNotFilled.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = checkDate(&task)
 	if err != nil {
+		s.logger.Printf("HandleEditTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	err = db.UpdateTask(&task)
+	err = s.store.UpdateTask(&task)
 	if err != nil {
+		s.logger.Printf("HandleEditTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	s.logger.Println("HandleEditTask: OK")
 	writeJSON(w, map[string]string{}, http.StatusOK)
 }
 
-func HandleTaskDone(w http.ResponseWriter, r *http.Request) {
+func (s *TaskService) HandleTaskDone(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if len(id) == 0 {
-		writeErrorJSON(w, "identifier is not specified", http.StatusInternalServerError)
+		s.logger.Printf("HandleTaskDone: ERR: %s\n", errIdentifierNotSpecified.Error())
+		writeErrorJSON(w, errIdentifierNotSpecified.Error(), http.StatusBadRequest)
 		return
 	}
 
-	task, err := db.GetTask(id)
+	task, err := s.store.GetTask(id)
 	if err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+		s.logger.Printf("HandleTaskDone: ERR: %s\n", err.Error())
+		writeErrorJSON(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
 	if len(task.Repeat) == 0 {
-		err = db.DeleteTask(id)
+		err = s.store.DeleteTask(id)
 		if err != nil {
+			s.logger.Printf("HandleTaskDone: ERR: %s\n", err.Error())
 			writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -218,33 +260,43 @@ func HandleTaskDone(w http.ResponseWriter, r *http.Request) {
 
 		newDate, err := nextdate.NextDate(now, task.Date, task.Repeat)
 		if err != nil {
+			s.logger.Printf("HandleTaskDone: ERR: %s\n", err.Error())
 			writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		err = db.UpdateDate(newDate, id)
+		err = s.store.UpdateDate(newDate, id)
+		if err != nil {
+			s.logger.Printf("HandleTaskDone: ERR: %s\n", err.Error())
+			writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
+	s.logger.Println("HandleTaskDone: OK")
 	writeJSON(w, map[string]string{}, http.StatusOK)
 }
 
-func HandleDeleteTask(w http.ResponseWriter, r *http.Request) {
+func (s *TaskService) HandleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if len(id) == 0 {
-		writeErrorJSON(w, "identifier is not specified", http.StatusInternalServerError)
+		s.logger.Printf("HandleDeleteTask: ERR: %s\n", errIdentifierNotSpecified.Error())
+		writeErrorJSON(w, errIdentifierNotSpecified.Error(), http.StatusBadRequest)
 		return
 	}
 
-	err := db.DeleteTask(id)
+	err := s.store.DeleteTask(id)
 	if err != nil {
+		s.logger.Printf("HandleDeleteTask: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	s.logger.Println("HandleDeleteTask: OK")
 	writeJSON(w, map[string]string{}, http.StatusOK)
 }
 
-func HandleSignIn(w http.ResponseWriter, r *http.Request) {
+func (s *TaskService) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 	var token struct {
 		Token string `json:"token"`
 	}
@@ -256,26 +308,31 @@ func HandleSignIn(w http.ResponseWriter, r *http.Request) {
 
 	_, err := buf.ReadFrom(r.Body)
 	if err != nil {
+		s.logger.Printf("HandleSignIn: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err = json.Unmarshal(buf.Bytes(), &pass); err != nil {
+		s.logger.Printf("HandleSignIn: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	envPass := os.Getenv("TODO_PASSWORD")
 	if pass.Pass != envPass {
+		s.logger.Printf("HandleSignIn: ERR: %s\n", "Invalid password")
 		writeErrorJSON(w, "Invalid password", http.StatusUnauthorized)
 		return
 	}
 
 	token.Token, err = auth.GenerateJWT(pass.Pass)
 	if err != nil {
+		s.logger.Printf("HandleSignIn: ERR: %s\n", err.Error())
 		writeErrorJSON(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	s.logger.Println("HandleSignIn: OK")
 	writeJSON(w, token, http.StatusOK)
 }

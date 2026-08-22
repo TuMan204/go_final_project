@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -15,17 +14,19 @@ type Task struct {
 	Repeat  string `json:"repeat"`
 }
 
-func AddTask(task *Task) (int64, error) {
+type TasksStore struct {
+	db *sql.DB
+}
+
+func NewTasksStore(db *sql.DB) TasksStore {
+	return TasksStore{db: db}
+}
+
+func (s *TasksStore) AddTask(task *Task) (int64, error) {
 	var id int64
 
-	db, err := sql.Open("sqlite", "scheduler.db")
-	if err != nil {
-		return id, err
-	}
-	defer db.Close()
-
 	query := "INSERT INTO scheduler (date, title, comment, repeat) VALUES (:date, :title, :comment, :repeat)"
-	res, err := db.Exec(query,
+	res, err := s.db.Exec(query,
 		sql.Named("date", task.Date),
 		sql.Named("title", task.Title),
 		sql.Named("comment", task.Comment),
@@ -36,27 +37,21 @@ func AddTask(task *Task) (int64, error) {
 	return id, err
 }
 
-func GetTasks(search string, limit int) ([]*Task, error) {
+func (s *TasksStore) GetTasks(search string, limit int) ([]*Task, error) {
 	tasks := make([]*Task, 0)
 
-	db, err := sql.Open("sqlite", "scheduler.db")
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	query := "SELECT * FROM scheduler ORDER BY date DESC LIMIT :limit"
+	query := "SELECT * FROM scheduler ORDER BY date LIMIT :limit"
 	if len(search) > 0 {
 		date, err := time.Parse("02.01.2006", search)
 		if err != nil {
-			query = "SELECT * FROM scheduler WHERE title LIKE :search OR comment LIKE :search ORDER BY date DESC LIMIT :limit"
+			query = "SELECT * FROM scheduler WHERE title LIKE :search OR comment LIKE :search ORDER BY date LIMIT :limit"
 			search = "%" + search + "%"
 		} else {
-			query = "SELECT * FROM scheduler WHERE date = :search LIMIT :limit"
+			query = "SELECT * FROM scheduler WHERE date = :search ORDER BY title LIMIT :limit"
 			search = date.Format("20060102")
 		}
 	}
-	rows, err := db.Query(query, sql.Named("limit", limit), sql.Named("search", search))
+	rows, err := s.db.Query(query, sql.Named("limit", limit), sql.Named("search", search))
 	if err != nil {
 		return nil, err
 	}
@@ -79,33 +74,21 @@ func GetTasks(search string, limit int) ([]*Task, error) {
 	return tasks, nil
 }
 
-func GetTask(id string) (*Task, error) {
+func (s *TasksStore) GetTask(id string) (*Task, error) {
 	var task Task
 
-	db, err := sql.Open("sqlite", "scheduler.db")
+	query := "SELECT * FROM scheduler WHERE id = :id"
+	err := s.db.QueryRow(query, sql.Named("id", id)).Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
 	if err != nil {
 		return nil, err
-	}
-	defer db.Close()
-
-	query := "SELECT * FROM scheduler WHERE id = :id"
-	err = db.QueryRow(query, sql.Named("id", id)).Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
-	if err != nil {
-		return nil, errors.New("task not found")
 	}
 
 	return &task, nil
 }
 
-func UpdateTask(task *Task) error {
-	db, err := sql.Open("sqlite", "scheduler.db")
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
+func (s *TasksStore) UpdateTask(task *Task) error {
 	query := "UPDATE scheduler SET date = :date, title = :title, comment = :comment, repeat = :repeat WHERE id = :id"
-	res, err := db.Exec(query,
+	res, err := s.db.Exec(query,
 		sql.Named("date", task.Date),
 		sql.Named("title", task.Title),
 		sql.Named("comment", task.Comment),
@@ -125,15 +108,9 @@ func UpdateTask(task *Task) error {
 	return nil
 }
 
-func UpdateDate(newDate string, id string) error {
-	db, err := sql.Open("sqlite", "scheduler.db")
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
+func (s *TasksStore) UpdateDate(newDate string, id string) error {
 	query := "UPDATE scheduler SET date = :date WHERE id = :id"
-	res, err := db.Exec(query,
+	res, err := s.db.Exec(query,
 		sql.Named("date", newDate),
 		sql.Named("id", id))
 	if err != nil {
@@ -150,22 +127,19 @@ func UpdateDate(newDate string, id string) error {
 	return nil
 }
 
-func DeleteTask(id string) error {
-	db, err := sql.Open("sqlite", "scheduler.db")
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = GetTask(id)
-	if err != nil {
-		return err
-	}
-
+func (s *TasksStore) DeleteTask(id string) error {
 	query := "DELETE FROM scheduler WHERE id = :id"
-	_, err = db.Exec(query, sql.Named("id", id))
+	res, err := s.db.Exec(query, sql.Named("id", id))
 	if err != nil {
 		return err
+	}
+
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf(`incorrect id for delete task`)
 	}
 
 	return nil
